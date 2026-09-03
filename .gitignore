@@ -1,0 +1,66 @@
+# Python environments and bytecode
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.pyd
+
+# Test, type-checker, formatter, and coverage caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pyright/
+.coverage
+.coverage.*
+htmlcov/
+
+# Local runtime state
+data/
+logs/
+runtime/
+tmp/
+*.log
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+tests/data/
+tests/fixtures/local/
+
+# Internal design notes are intentionally kept out of the public repository
+doc/
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+config.local.*
+settings.local.*
+*.local
+*.local.*
+*.secret
+*.token
+credentials.*
+*.pem
+*.key
+*.p12
+*.jks
+secrets/
+private/
+
+# Local agent/client configuration
+.codex/
+.claude/
+.mcp.json
+
+# Editor and operating-system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
