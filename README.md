@@ -16,31 +16,39 @@ through FastMCP.
 
 ### Quick start
 
-#### 1. Install and start
+#### 1. Install the agent skill
 
-Requirements: Python 3.11+ and [uv](https://docs.astral.sh/uv/getting-started/installation/).
+The only required manual installation step is to install the `smsmcphub` skill.
+It teaches the agent the available SMS capabilities and can then deploy the
+server, register MCP, detect the LAN address, and guide Provider setup.
+
+Requirements: a Codex-compatible client and Git. Clone the repository if it is
+not already present, then copy the skill into the Codex user skill directory:
 
 ```powershell
+git clone https://github.com/PoilZero/SmsMCPHub.git
 cd SmsMCPHub
-uv sync --extra dev
-uv run smsmcphub
+Copy-Item -Recurse -Force .\skills\smsmcphub `
+  "$env:USERPROFILE\.codex\skills\smsmcphub"
 ```
 
-The service listens on `0.0.0.0:8000`:
+Restart Codex or start a new session, then ask the agent to install and configure
+SmsMCPHub. Do not manually start the server or register MCP unless the skill
+reports a setup problem.
+
+#### 2. Let the skill configure the server and Provider
+
+Ask the agent for a local setup, for example:
 
 ```text
-HTTP API: http://127.0.0.1:8000
-MCP:      http://127.0.0.1:8000/mcp
+Install and configure SmsMCPHub for a phone on my private Wi-Fi network.
 ```
 
-For a phone on the same Wi-Fi, replace `127.0.0.1` with the computer's LAN
-address: `http://<COMPUTER_LAN_IP>:8000`.
+The skill will install the locked dependencies, create `.env` only when needed,
+start the server, verify `/healthz`, register the Streamable HTTP MCP endpoint,
+report the exact LAN URLs, and guide the SmsForwarder Webhook configuration.
 
-If the phone cannot connect, allow inbound TCP port `8000` on the active local
-network profile in the operating system firewall. Do not use a guest Wi-Fi
-network with client isolation enabled.
-
-#### 2. Configure SmsForwarder on the phone
+When prompted for the phone Provider, use its HTTP Webhook channel:
 
 Install or open [SmsForwarder](https://github.com/pppscn/SmsForwarder), then add
 an HTTP Webhook forwarding channel. In the SmsForwarder UI, these fields may be
@@ -55,7 +63,8 @@ WebParams: leave empty for the first test
 ```
 
 Create or enable a rule for received SMS messages and select this Webhook
-channel. Keep the phone and computer on the same Wi-Fi network.
+channel. Keep the phone and computer on the same Wi-Fi network. The skill will
+provide the actual LAN IP and final URL for this step.
 
 With empty `WebParams`, SmsForwarder sends its default form fields `from`,
 `content`, `timestamp`, and optional `sign`. SmsMCPHub parses these fields
@@ -157,10 +166,13 @@ sms_latest
 sms_conversations
 ```
 
-#### 4. Connect Codex and Claude Code
+#### 4. Verify MCP or use the manual fallback
 
-The server uses Streamable HTTP at `/mcp`. On the same computer, use
+The skill normally registers MCP automatically. The server uses Streamable HTTP
+at `/mcp`. On the same computer, use
 `127.0.0.1`; from another agent host on the LAN, use the computer's LAN IP.
+
+If the skill cannot register the client, use the manual commands below.
 
 **Codex CLI / Codex app / IDE extension**
 
@@ -225,33 +237,6 @@ The project configuration is stored in `.mcp.json`:
 
 With MCP authentication enabled, add an Authorization header through Claude
 Code's `--header` option instead of committing the token to `.mcp.json`.
-
-#### Optional agent skill
-
-The repository includes an implicit `smsmcphub` skill. It teaches an agent what
-SmsMCPHub can do, how to choose its four read-only tools, and how to install and
-configure the server when the MCP connection is missing. Install it into the
-current Codex user's skill directory:
-
-```powershell
-Copy-Item -Recurse -Force .\skills\smsmcphub `
-  "$env:USERPROFILE\.codex\skills\smsmcphub"
-```
-
-For a Windows setup that installs dependencies, creates a local `.env` when
-needed, detects a LAN address, starts the server, registers Codex MCP, and
-installs the skill, run:
-
-```powershell
-.\skills\smsmcphub\scripts\install.ps1 `
-  -ProjectPath . -Exposure lan -ConfigureCodex -InstallSkill -Start
-```
-
-The script never configures public exposure and never overwrites an existing
-`.env`. On macOS or Linux, run `uv sync --extra dev`, copy the skill directory to
-`~/.codex/skills/smsmcphub`, and start the service with `uv run smsmcphub`.
-If the computer has multiple adapters, add `-NetworkInterface <WLAN_INTERFACE>`
-so the generated phone URL uses the Wi-Fi address.
 
 ### Core architecture
 
@@ -381,31 +366,36 @@ SmsMCPHub 是一个面向 Agent 的解耦短信接入网关。它兼容
 
 ### 快速使用
 
-#### 1. 安装并启动
+#### 1. 安装 Agent Skill
 
-依赖：Python 3.11+ 和
-[uv](https://docs.astral.sh/uv/getting-started/installation/)。
+用户唯一需要手动安装的是 `smsmcphub` Skill。它会告诉 Agent 有哪些短信能
+力，并在后续自动部署 Server、注册 MCP、探测局域网 IP 和引导 Provider 配置。
+
+依赖：支持 Codex Skill 的 Agent 和 Git。仓库不存在时先克隆，然后将 Skill 复制
+到当前 Codex 用户目录：
 
 ```powershell
+git clone https://github.com/PoilZero/SmsMCPHub.git
 cd SmsMCPHub
-uv sync --extra dev
-uv run smsmcphub
+Copy-Item -Recurse -Force .\skills\smsmcphub `
+  "$env:USERPROFILE\.codex\skills\smsmcphub"
 ```
 
-服务监听 `0.0.0.0:8000`：
+重启 Codex 或新建会话，然后直接让 Agent 安装和配置 SmsMCPHub。除非 Skill 报告
+问题，否则不需要手动启动 Server 或注册 MCP。
+
+#### 2. 让 Skill 配置 Server 和 Provider
+
+可以这样向 Agent 发起安装请求：
 
 ```text
-HTTP API: http://127.0.0.1:8000
-MCP:      http://127.0.0.1:8000/mcp
+请为同一 Wi-Fi 下的手机安装并配置 SmsMCPHub。
 ```
 
-同一 Wi-Fi 下的手机不能使用 `127.0.0.1`，需要把它替换为电脑的局域网 IP：
-`http://<电脑局域网IP>:8000`。
+Skill 会安装锁定依赖、在需要时创建 `.env`、启动 Server、检查 `/healthz`、注册
+Streamable HTTP MCP、输出准确的局域网 URL，并引导 SmsForwarder Webhook 配置。
 
-如果手机无法连接，请在操作系统防火墙中允许当前网络配置的 TCP `8000` 端
-口。不要使用启用了客户端隔离的访客 Wi-Fi。
-
-#### 2. 配置手机端 SmsForwarder
+Agent 要求配置手机 Provider 时，选择 HTTP Webhook：
 
 安装或打开 [SmsForwarder](https://github.com/pppscn/SmsForwarder)，新增
 HTTP Webhook 转发通道。不同版本的界面可能叫 `WebServer`、`Webhook URL`、
@@ -420,7 +410,7 @@ WebParams：第一次测试时留空
 ```
 
 新增或启用“接收短信”转发规则，并选择这个 Webhook 通道。手机和电脑必须连
-接同一个 Wi-Fi。
+接同一个 Wi-Fi。具体局域网 IP 和最终 URL 由 Skill 输出。
 
 当 `WebParams` 留空时，SmsForwarder 默认发送表单字段 `from`、`content`、
 `timestamp` 和可选的 `sign`。SmsMCPHub 已经直接兼容这些字段。SmsForwarder
@@ -521,10 +511,13 @@ sms_latest
 sms_conversations
 ```
 
-#### 4. 提供给 Codex 和 Claude Code 的 MCP 信息
+#### 4. 验证 MCP 或使用手动兜底
 
-服务使用 `/mcp` 提供 Streamable HTTP。Agent 和服务在同一台电脑时使用
+Skill 通常会自动注册 MCP。服务使用 `/mcp` 提供 Streamable HTTP。Agent 和服务在
+同一台电脑时使用
 `127.0.0.1`；如果 Agent 在局域网另一台机器上运行，则使用电脑的局域网 IP。
+
+只有 Skill 无法注册客户端时，才使用下面的手动命令。
 
 **Codex CLI / Codex 应用 / IDE 扩展**
 
@@ -587,30 +580,6 @@ claude mcp add --transport http --scope project `
 
 启用 MCP 鉴权后，使用 Claude Code 的 `--header` 选项传递 Authorization，不要
 把 token 提交到 `.mcp.json`。
-
-#### 可选 Agent Skill
-
-仓库内置一个可隐式触发的 `smsmcphub` Skill。它描述 SmsMCPHub 的能力、四个只
-读工具的选择原则，并在 MCP 不可用时引导安装和配置服务。复制到当前 Codex 用户
-的 Skill 目录：
-
-```powershell
-Copy-Item -Recurse -Force .\skills\smsmcphub `
-  "$env:USERPROFILE\.codex\skills\smsmcphub"
-```
-
-Windows 下可以用下面的命令一次完成依赖安装、创建本地 `.env`、探测局域网 IP、
-启动服务、注册 Codex MCP 和安装 Skill：
-
-```powershell
-.\skills\smsmcphub\scripts\install.ps1 `
-  -ProjectPath . -Exposure lan -ConfigureCodex -InstallSkill -Start
-```
-
-脚本不会配置公网暴露，也不会覆盖已有 `.env`。macOS 或 Linux 下执行
-`uv sync --extra dev`，将 Skill 目录复制到 `~/.codex/skills/smsmcphub`，再使用
-`uv run smsmcphub` 启动服务。如果电脑有多个网卡，可以增加
-`-NetworkInterface <WLAN网卡名称>`，确保生成的手机 URL 使用 Wi-Fi 地址。
 
 ### 核心架构
 
