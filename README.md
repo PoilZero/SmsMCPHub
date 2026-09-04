@@ -277,6 +277,9 @@ SmsForwarder / phone or cloud provider
      HTTP API             FastMCP Server
                                |
                                v
+                 SmsMCPHub Agent Skill (optional)
+                               |
+                               v
                              Agent
 ```
 
@@ -298,6 +301,8 @@ protocol details:
   idempotent successes.
 - **FastMCP Server** exposes only the stable domain contract and does not know
   SmsForwarder's raw field names.
+- **SmsMCPHub Agent Skill** adds intent routing and setup guidance. It is
+  optional: the MCP server remains usable directly by any compatible client.
 
 ### MCP tools
 
@@ -631,6 +636,9 @@ SmsForwarder / 手机或云端 Provider
        HTTP API             FastMCP Server
                                |
                                v
+                 SmsMCPHub Agent Skill（可选）
+                               |
+                               v
                              Agent
 ```
 
@@ -646,6 +654,8 @@ SmsForwarder / 手机或云端 Provider
 - **SQLite Repository**保存消息，并为时间、发送人、接收人和会话查询建立索引。
   重复 Provider 事件按幂等成功处理。
 - **FastMCP Server**只暴露稳定的领域契约，不了解 SmsForwarder 的原始字段名。
+- **SmsMCPHub Agent Skill**提供意图路由和安装配置引导。它是可选层，任何兼容 MCP
+  的客户端仍然可以直接使用 Server。
 
 ### MCP 工具
 

@@ -1,6 +1,6 @@
 interface:
   display_name: "SmsMCPHub SMS Assistant"
-  short_description: "查短信验证码并自动选择查询工具"
+  short_description: "查短信验证码并自动选择 SmsMCPHub 查询工具"
   default_prompt: "Use $smsmcphub to handle an SMS lookup or SmsMCPHub setup request."
 
 dependencies:
