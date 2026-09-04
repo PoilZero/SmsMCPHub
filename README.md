@@ -8,22 +8,18 @@
 
 > SmsMCPHub enables MCP-compatible agent frameworks—such as Codex and Claude Code—to send and receive mobile SMS messages via MCP, thereby fully automating workflows that rely on SMS. It utilizes SQLite for data persistence and employs FastMCP to provide a unified query interface.
 
-SmsMCPHub is a decoupled SMS ingestion gateway for agents. It accepts messages
-from phone-side or cloud forwarding providers such as
-[SmsForwarder](https://github.com/pppscn/SmsForwarder), normalizes them into a
-stable message model, stores them in SQLite, and exposes read-only query tools
-through FastMCP.
+SmsMCPHub is a decoupled SMS gateway for agents. It accepts messages from
+phone-side or cloud providers such as
+[SmsForwarder](https://github.com/pppscn/SmsForwarder), normalizes them, stores
+them in SQLite, and exposes read-only query tools through FastMCP.
 
-### Quick start
+## Quick start
 
-#### 1. Install the agent skill
+### 1. Install the Skill
 
-The only required manual installation step is to install the `smsmcphub` skill.
-It teaches the agent the available SMS capabilities and can then deploy the
-server, register MCP, detect the LAN address, and guide Provider setup.
-
-Requirements: a Codex-compatible client and Git. Clone the repository if it is
-not already present, then copy the skill into the Codex user skill directory:
+The only required manual step is to install the `smsmcphub` Skill. It teaches
+the agent what SmsMCPHub can do and how to use it without requiring users to
+name an MCP server or tool.
 
 ```powershell
 git clone https://github.com/PoilZero/SmsMCPHub.git
@@ -32,29 +28,133 @@ Copy-Item -Recurse -Force .\skills\smsmcphub `
   "$env:USERPROFILE\.codex\skills\smsmcphub"
 ```
 
-Restart Codex or start a new session, then ask the agent to install and configure
-SmsMCPHub. Do not manually start the server or register MCP unless the skill
-reports a setup problem.
+Restart Codex or start a new session after installation.
 
-#### 2. Let the skill configure the server and Provider
+### 2. Ask the Skill to configure everything
 
-Ask the agent for a local setup, for example:
+Tell the agent what kind of deployment you want, for example:
 
 ```text
 Install and configure SmsMCPHub for a phone on my private Wi-Fi network.
 ```
 
-The skill will install the locked dependencies, create `.env` only when needed,
-start the server, verify `/healthz`, register the Streamable HTTP MCP endpoint,
-report the exact LAN URLs, and guide the SmsForwarder Webhook configuration.
+The Skill will guide the complete setup: install the Server dependencies, create
+local configuration when needed, choose loopback or private-LAN exposure,
+detect the usable address, start and health-check the Server, register MCP with
+the active agent client, and guide the Provider Webhook setup. Public exposure
+is never enabled without an explicit user choice.
 
-When prompted for the phone Provider, use its HTTP Webhook channel:
+Follow the Skill's prompts on the phone Provider and send a test message when it
+asks you to verify the connection.
 
-Install or open [SmsForwarder](https://github.com/pppscn/SmsForwarder), then add
-an HTTP Webhook forwarding channel. In the SmsForwarder UI, these fields may be
-named `WebServer`, `Webhook URL`, `WebParams`, or similar:
+### 3. Use the Skill naturally
 
-The provider's reference is the [SmsForwarder Webhook guide](https://github.com/pppscn/SmsForwarder/wiki/%E9%99%84%E5%BD%951%EF%BC%9A%E5%90%91webhook%E5%8F%91%E9%80%81post-get-put-patch%E8%AF%B7%E6%B1%82).
+After setup, ask for the result directly. You do not need to mention MCP,
+SmsMCPHub, or a tool name:
+
+```text
+查一下最近的验证码
+```
+
+```text
+Find the latest login code received by SMS.
+```
+
+The Skill helps the agent select the appropriate read-only operation based on
+the request. It does not restrict the request to any particular website,
+platform, sender, or business workflow.
+
+## Core architecture
+
+```text
+Phone or cloud Provider
+          |
+          | HTTP Webhook / future adapters
+          v
+     FastAPI Ingress
+          |
+          v
+    Provider Adapter
+          |
+          v
+ Canonical Message Model
+          |
+          v
+       SQLite Store
+          |
+          v
+      FastMCP Server
+          |
+          v
+ Agent + optional SmsMCPHub Skill
+```
+
+The project is a modular monolith. FastAPI receives and validates Provider
+payloads, the adapter converts them to the canonical message model, and the
+shared service persists and queries messages. FastMCP exposes only the stable
+domain contract, so Provider-specific field names do not leak into agent
+requests. The optional Skill adds intent routing and installation guidance.
+
+## MCP capabilities
+
+| Tool | Use it for |
+|---|---|
+| `sms_latest` | The newest/current SMS, verification codes, OTPs, login codes, or recent alerts |
+| `sms_search` | SMS history, multiple messages, time ranges, sender/recipient filters, or keyword searches |
+| `sms_get` | Complete details and metadata for a known message ID |
+| `sms_conversations` | Conversation, contact, or thread summaries |
+
+All current tools are read-only. The Server does not send SMS, log into other
+apps, publish content, or perform external side effects.
+
+## Implementation and tests
+
+- Python 3.11+
+- FastAPI and Uvicorn
+- FastMCP Streamable HTTP
+- Pydantic
+- SQLite via Python's standard `sqlite3` driver
+- `uv` with a committed lock file
+
+Run the checks from the project directory:
+
+```powershell
+uv sync --extra dev
+uv run pytest -q
+uv run ruff check src tests
+```
+
+The tests cover SmsForwarder form and JSON payloads, mapping, signatures,
+idempotent ingestion, pagination, conversations, FastAPI endpoints, MCP
+discovery, structured results, and authentication.
+
+## Appendix: manual reference
+
+The normal user path is Skill-first. This appendix is for manual installation,
+debugging, and clients that cannot be configured by the Skill.
+
+### A. Manual Server installation and startup
+
+Requirements: Python 3.11+ and
+[uv](https://docs.astral.sh/uv/getting-started/installation/).
+
+```powershell
+cd SmsMCPHub
+uv sync --extra dev
+Copy-Item .env.example .env
+uv run smsmcphub
+```
+
+The default Server listens on `0.0.0.0:8000`. The database is created at
+`data/smsmcphub.db`; `.env`, logs, and database files are local-only.
+
+### B. Manual SmsForwarder configuration
+
+Install or open [SmsForwarder](https://github.com/pppscn/SmsForwarder), then
+add an HTTP Webhook forwarding channel. The UI may call these fields
+`WebServer`, `Webhook URL`, `WebParams`, or similar.
+
+Official reference: [SmsForwarder Webhook guide](https://github.com/pppscn/SmsForwarder/wiki/%E9%99%84%E5%BD%951%3A%E5%90%91webhook%E5%8F%91%E9%80%81post-get-put-patch%E8%AF%B7%E6%B1%82).
 
 ```text
 Method:  POST
@@ -62,47 +162,36 @@ URL:     http://<COMPUTER_LAN_IP>:8000/api/v1/providers/smsforwarder/webhook
 WebParams: leave empty for the first test
 ```
 
-Create or enable a rule for received SMS messages and select this Webhook
-channel. Keep the phone and computer on the same Wi-Fi network. The skill will
-provide the actual LAN IP and final URL for this step.
+Enable a received-SMS forwarding rule and select this Webhook channel. The
+phone and computer must be on the same reachable Wi-Fi network.
 
-With empty `WebParams`, SmsForwarder sends its default form fields `from`,
-`content`, `timestamp`, and optional `sign`. SmsMCPHub parses these fields
-directly. SmsForwarder can also send a custom JSON template; the adapter accepts
-common aliases and configurable JSON paths.
+With empty `WebParams`, SmsForwarder sends the default form fields `from`,
+`content`, `timestamp`, and optional `sign`. The adapter also accepts custom
+JSON templates, common aliases, and simple JSON path mappings.
 
-For a protected setup, configure the same secret in SmsForwarder and restart
-SmsMCPHub with:
+To enable SmsForwarder signature validation, set the same secret in both
+systems before starting the Server:
 
 ```powershell
 $env:SMSFORWARDER_SECRET = "replace-with-the-same-secret"
 uv run smsmcphub
 ```
 
-SmsMCPHub then validates SmsForwarder's HMAC-SHA256 timestamp signature. Use
-HTTPS or a private network/VPN for anything beyond a local test.
+### C. Manual verification
 
-#### 3. Verify the service and the message path
-
-Check the service from the computer:
+Health check:
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/healthz
 ```
 
-Expected response:
+Expected:
 
 ```json
 {"status":"ok"}
 ```
 
-Check the same URL from the phone browser using the computer LAN address:
-
-```text
-http://<COMPUTER_LAN_IP>:8000/healthz
-```
-
-You can simulate SmsForwarder before sending a real SMS:
+Simulate SmsForwarder:
 
 ```powershell
 $body = @{
@@ -117,7 +206,7 @@ Invoke-RestMethod `
   -Body $body
 ```
 
-Expected response:
+Expected:
 
 ```json
 {
@@ -127,73 +216,29 @@ Expected response:
 }
 ```
 
-After sending a real SMS, query the HTTP API:
+### D. Manual MCP client configuration
 
-```powershell
-Invoke-RestMethod `
-  "http://127.0.0.1:8000/api/v1/messages?keyword=SmsMCPHub" |
-  ConvertTo-Json -Depth 8
-```
+The MCP endpoint is Streamable HTTP at `/mcp`. Use `127.0.0.1` when the Agent
+and Server share a computer; otherwise use the Server computer's private-LAN
+address.
 
-Run the MCP smoke test from the project directory:
+#### Codex CLI / app / IDE extension
 
-```powershell
-@'
-import asyncio
-from fastmcp import Client
-
-async def main():
-    async with Client("http://127.0.0.1:8000/mcp") as client:
-        tools = await client.list_tools()
-        print([tool.name for tool in tools])
-        result = await client.call_tool(
-            "sms_search",
-            {"keyword": "SmsMCPHub", "limit": 10},
-        )
-        print(result.content[0].text)
-        print(result.data)
-
-asyncio.run(main())
-'@ | uv run python -
-```
-
-The tool list should contain:
-
-```text
-sms_search
-sms_get
-sms_latest
-sms_conversations
-```
-
-#### 4. Verify MCP or use the manual fallback
-
-The skill normally registers MCP automatically. The server uses Streamable HTTP
-at `/mcp`. On the same computer, use
-`127.0.0.1`; from another agent host on the LAN, use the computer's LAN IP.
-
-If the skill cannot register the client, use the manual commands below.
-
-**Codex CLI / Codex app / IDE extension**
-
-Reference: [Codex MCP documentation](https://developers.openai.com/codex/mcp).
-
-Add the server with the Codex CLI:
+Official reference: [Codex MCP documentation](https://developers.openai.com/codex/mcp).
 
 ```powershell
 codex mcp add smsmcphub --url http://127.0.0.1:8000/mcp
 codex mcp list
 ```
 
-The equivalent `config.toml` entry is:
+Equivalent `config.toml`:
 
 ```toml
 [mcp_servers.smsmcphub]
 url = "http://127.0.0.1:8000/mcp"
 ```
 
-If `SMSMCPHUB_MCP_TOKEN` is configured on the server, use a bearer token
-environment variable instead of putting the token directly in the file:
+With MCP Token authentication:
 
 ```toml
 [mcp_servers.smsmcphub]
@@ -201,28 +246,25 @@ url = "http://127.0.0.1:8000/mcp"
 bearer_token_env_var = "SMSMCPHUB_MCP_TOKEN"
 ```
 
-Codex reads this configuration from `~/.codex/config.toml`; a trusted project
-may also use a project-scoped `.codex/config.toml`. After adding the server,
-restart the Codex client or use `/mcp` to inspect the active tools.
+Restart Codex or use `/mcp` to inspect the active server and tools.
 
-**Claude Code (`cc`)**
+#### Claude Code (`cc`)
 
-Reference: [Claude Code MCP documentation](https://code.claude.com/docs/en/mcp).
+Official reference: [Claude Code MCP documentation](https://code.claude.com/docs/en/mcp).
 
 ```powershell
 claude mcp add --transport http smsmcphub http://127.0.0.1:8000/mcp
 claude mcp list
 ```
 
-Inside a Claude Code session, use `/mcp` to check the connection and tool list.
-For a project-scoped configuration:
+For a project-scoped server:
 
 ```powershell
 claude mcp add --transport http --scope project `
   smsmcphub http://127.0.0.1:8000/mcp
 ```
 
-The project configuration is stored in `.mcp.json`:
+The resulting `.mcp.json` entry is:
 
 ```json
 {
@@ -235,121 +277,22 @@ The project configuration is stored in `.mcp.json`:
 }
 ```
 
-With MCP authentication enabled, add an Authorization header through Claude
-Code's `--header` option instead of committing the token to `.mcp.json`.
+Use `/mcp` inside Claude Code to check the connection.
 
-### Core architecture
+### E. Manual Windows setup helper
 
-```text
-SmsForwarder / phone or cloud provider
-                    |
-                    | HTTP Webhook
-                    v
-              FastAPI Ingress
-                    |
-                    v
-             Provider Adapter
-                    |
-                    v
-          Canonical Message Model
-                    |
-                    v
-                SQLite Store
-                    |
-          +---------+----------+
-          |                    |
-          v                    v
-     HTTP API             FastMCP Server
-                               |
-                               v
-                 SmsMCPHub Agent Skill (optional)
-                               |
-                               v
-                             Agent
-```
-
-The inbound path and the agent path share the domain service but not provider
-protocol details:
-
-- **FastAPI Ingress** receives the raw request, verifies the provider, and
-  returns an acknowledgement only after the message has been persisted.
-- **Provider Adapter** validates and parses provider-specific form or JSON
-  payloads. The SmsForwarder adapter supports default form fields, custom JSON,
-  aliases, simple JSON paths, and HMAC-SHA256 signatures.
-- **Canonical Message Model** gives every source the same fields: sender,
-  recipient, body, receive time, source, conversation, status, metadata, and
-  deduplication key.
-- **Message Service** normalizes phone numbers, creates conversation IDs,
-  applies idempotency, and provides the shared query operations.
-- **SQLite Repository** stores messages with indexes for time, sender,
-  recipient, and conversation queries. Repeated provider events are accepted as
-  idempotent successes.
-- **FastMCP Server** exposes only the stable domain contract and does not know
-  SmsForwarder's raw field names.
-- **SmsMCPHub Agent Skill** adds intent routing and setup guidance. It is
-  optional: the MCP server remains usable directly by any compatible client.
-
-### MCP tools
-
-| Tool | Purpose | Main inputs |
-|---|---|---|
-| `sms_search` | Search messages with filters and pagination | sender, recipient, keyword, time range, status, limit, cursor |
-| `sms_get` | Fetch one complete message | message ID |
-| `sms_latest` | Return the newest matching message | sender, keyword, time window |
-| `sms_conversations` | List conversation summaries | limit, cursor |
-
-Search and latest results return compact message summaries to keep agent context
-small. `sms_get` returns the complete canonical message, including metadata.
-MVP v1 intentionally exposes read-only operations; sending, replying, deleting,
-and long-lived watches are not enabled.
-
-### HTTP API
-
-```text
-GET  /healthz
-POST /api/v1/providers/{provider_id}/webhook
-GET  /api/v1/messages/{message_id}
-GET  /api/v1/messages
-POST /mcp   (Streamable HTTP MCP endpoint)
-```
-
-The default provider ID is `smsforwarder`, so the standard Webhook URL is:
-
-```text
-http://<COMPUTER_LAN_IP>:8000/api/v1/providers/smsforwarder/webhook
-```
-
-### Implementation and tests
-
-The implementation is a modular monolith built with:
-
-- Python 3.11+
-- FastAPI and Uvicorn for HTTP
-- FastMCP Streamable HTTP for agent access
-- Pydantic for validated domain and tool schemas
-- SQLite with Python's standard `sqlite3` driver
-- `uv` for reproducible environments and locked dependencies
-
-Run the checks with:
+The repository includes a deterministic helper for users who need to run the
+manual setup from PowerShell:
 
 ```powershell
-uv run pytest -q
-uv run ruff check src tests
-uv run python -m compileall -q src tests
+.\skills\smsmcphub\scripts\install.ps1 `
+  -ProjectPath . -Exposure lan -ConfigureCodex -InstallSkill -Start
 ```
 
-The test suite covers SmsForwarder form and JSON payloads, field mapping,
-signature validation, replay rejection, idempotent ingestion, pagination,
-conversation aggregation, FastAPI endpoints, MCP discovery, structured results,
-and MCP token protection.
-
-### Security notes
-
-The default development setup has no provider secret and no MCP token so that a
-same-network smoke test is easy. Before exposing the service outside a trusted
-LAN, configure `SMSFORWARDER_SECRET` and `SMSMCPHUB_MCP_TOKEN`, use HTTPS or a
-VPN, restrict the firewall, and keep raw payload storage disabled unless it is
-needed for debugging.
+Use `-Exposure loopback` when the phone does not need LAN access. When multiple
+network adapters are present, pass `-NetworkInterface <WLAN_INTERFACE>` so the
+phone URL uses the Wi-Fi address. The helper never configures public exposure
+and never overwrites an existing `.env`.
 
 <p align="right"><a href="#english">Back to language switch</a> | <a href="#中文">中文</a></p>
 
@@ -359,20 +302,17 @@ needed for debugging.
 
 > SmsMCPHub 让Codex、Claude Code 等任意支持MCP的Agent框架通过MCP收发移动设备的短信消息等，以全自动各种需要短信的工作流。通过SQLite持久化，并使用FastMCP提供统一查询接口。
 
-SmsMCPHub 是一个面向 Agent 的解耦短信接入网关。它兼容
-[SmsForwarder](https://github.com/pppscn/SmsForwarder) 等手机端或云端转发
-服务，将消息转换为稳定的统一模型，保存到 SQLite，并通过 FastMCP 提供只
-读查询工具。
+SmsMCPHub 是一个解耦的短信接入网关，兼容
+[SmsForwarder](https://github.com/pppscn/SmsForwarder) 等手机端或云端转发服务。
+它使用 FastAPI 接收并标准化短信，使用 SQLite 持久化，再通过 FastMCP 提供只读
+查询工具。
 
-### 快速使用
+## 快速使用
 
-#### 1. 安装 Agent Skill
+### 1. 安装 Skill
 
-用户唯一需要手动安装的是 `smsmcphub` Skill。它会告诉 Agent 有哪些短信能
-力，并在后续自动部署 Server、注册 MCP、探测局域网 IP 和引导 Provider 配置。
-
-依赖：支持 Codex Skill 的 Agent 和 Git。仓库不存在时先克隆，然后将 Skill 复制
-到当前 Codex 用户目录：
+用户唯一需要手动安装的是 `smsmcphub` Skill。它会告诉 Agent SmsMCPHub 有哪些
+能力，以及如何在用户不指定 MCP 或工具名称时自动使用这些能力。
 
 ```powershell
 git clone https://github.com/PoilZero/SmsMCPHub.git
@@ -381,27 +321,125 @@ Copy-Item -Recurse -Force .\skills\smsmcphub `
   "$env:USERPROFILE\.codex\skills\smsmcphub"
 ```
 
-重启 Codex 或新建会话，然后直接让 Agent 安装和配置 SmsMCPHub。除非 Skill 报告
-问题，否则不需要手动启动 Server 或注册 MCP。
+安装后重启 Codex 或新建会话。
 
-#### 2. 让 Skill 配置 Server 和 Provider
+### 2. 让 Skill 自动完成配置
 
-可以这样向 Agent 发起安装请求：
+直接告诉 Agent 你的部署需求，例如：
 
 ```text
 请为同一 Wi-Fi 下的手机安装并配置 SmsMCPHub。
 ```
 
-Skill 会安装锁定依赖、在需要时创建 `.env`、启动 Server、检查 `/healthz`、注册
-Streamable HTTP MCP、输出准确的局域网 URL，并引导 SmsForwarder Webhook 配置。
+Skill 会引导完成完整配置：安装 Server 依赖、按需创建本地配置、选择本机或私有
+局域网暴露方式、探测可用地址、启动并检查 Server、注册 MCP，以及引导配置手机
+Provider 的 Webhook。没有得到用户明确选择时，不会配置公网访问。
 
-Agent 要求配置手机 Provider 时，选择 HTTP Webhook：
+按照 Skill 的提示在手机 Provider 中完成配置，并在要求测试时发送一条测试短信。
 
-安装或打开 [SmsForwarder](https://github.com/pppscn/SmsForwarder)，新增
-HTTP Webhook 转发通道。不同版本的界面可能叫 `WebServer`、`Webhook URL`、
-`WebParams` 或类似名称：
+### 3. 直接使用 Skill
 
-官方配置参考：[SmsForwarder Webhook 文档](https://github.com/pppscn/SmsForwarder/wiki/%E9%99%84%E5%BD%951%EF%BC%9A%E5%90%91webhook%E5%8F%91%E9%80%81post-get-put-patch%E8%AF%B7%E6%B1%82)。
+配置完成后直接描述需求，不需要提到 MCP、SmsMCPHub 或工具名称：
+
+```text
+查一下最近的验证码
+```
+
+```text
+查找最近收到的登录短信
+```
+
+Skill 会帮助 Agent 根据用户意图自动选择合适的只读操作，不限定快手、小红书或任
+何特定网站、平台、发送人和业务流程。
+
+## 核心架构
+
+```text
+手机或云端 Provider
+          |
+          | HTTP Webhook / 后续适配器
+          v
+       FastAPI 接入层
+          |
+          v
+       Provider 适配器
+          |
+          v
+        统一消息模型
+          |
+          v
+          SQLite
+          |
+          v
+       FastMCP Server
+          |
+          v
+ Agent + 可选 SmsMCPHub Skill
+```
+
+项目采用模块化单体。FastAPI 接收并校验 Provider 报文，适配器将其转换为统一消
+息模型，共享服务负责持久化和查询。FastMCP 只暴露稳定的领域契约，不让 Provider
+特有字段进入 Agent 请求。可选 Skill 负责意图路由和安装引导。
+
+## MCP 能力
+
+| 工具 | 使用场景 |
+|---|---|
+| `sms_latest` | 最新短信、验证码、OTP、登录码和近期提醒 |
+| `sms_search` | 短信历史、多条消息、时间范围、发送人/接收人筛选和关键词搜索 |
+| `sms_get` | 根据消息 ID 查看完整详情和元数据 |
+| `sms_conversations` | 会话、联系人或消息线程概览 |
+
+当前所有工具都是只读的。Server 不发送短信、不登录其他应用、不发布内容，也不执
+行其他外部副作用。
+
+## 实现和测试
+
+- Python 3.11+
+- FastAPI 和 Uvicorn
+- FastMCP Streamable HTTP
+- Pydantic
+- Python 标准库 `sqlite3` 驱动 SQLite
+- `uv` 和提交到仓库的锁定文件
+
+在项目目录执行：
+
+```powershell
+uv sync --extra dev
+uv run pytest -q
+uv run ruff check src tests
+```
+
+测试覆盖 SmsForwarder 表单和 JSON、字段映射、签名、幂等入库、分页、会话、
+FastAPI 接口、MCP 发现、结构化结果和鉴权。
+
+## 附录：手动参考
+
+正常用户路径是 Skill-first。下面内容用于手动安装、故障排查，以及 Skill 无法配
+置客户端时的备用操作。
+
+### A. 手动安装和启动 Server
+
+依赖：Python 3.11+ 和
+[uv](https://docs.astral.sh/uv/getting-started/installation/)。
+
+```powershell
+cd SmsMCPHub
+uv sync --extra dev
+Copy-Item .env.example .env
+uv run smsmcphub
+```
+
+Server 默认监听 `0.0.0.0:8000`。数据库会自动创建到 `data/smsmcphub.db`；`.env`、
+日志和数据库只保存在本地。
+
+### B. 手动配置 SmsForwarder
+
+安装或打开 [SmsForwarder](https://github.com/pppscn/SmsForwarder)，新增 HTTP
+Webhook 转发通道。不同版本界面可能叫 `WebServer`、`Webhook URL`、`WebParams`
+或类似名称。
+
+官方参考：[SmsForwarder Webhook 文档](https://github.com/pppscn/SmsForwarder/wiki/%E9%99%84%E5%BD%951%3A%E5%90%91webhook%E5%8F%91%E9%80%81post-get-put-patch%E8%AF%B7%E6%B1%82)。
 
 ```text
 请求方式：POST
@@ -409,45 +447,35 @@ URL：     http://<电脑局域网IP>:8000/api/v1/providers/smsforwarder/webhook
 WebParams：第一次测试时留空
 ```
 
-新增或启用“接收短信”转发规则，并选择这个 Webhook 通道。手机和电脑必须连
-接同一个 Wi-Fi。具体局域网 IP 和最终 URL 由 Skill 输出。
+启用“接收短信”转发规则并选择该 Webhook 通道。手机和电脑必须在同一个可达的
+Wi-Fi 网络中。
 
 当 `WebParams` 留空时，SmsForwarder 默认发送表单字段 `from`、`content`、
-`timestamp` 和可选的 `sign`。SmsMCPHub 已经直接兼容这些字段。SmsForwarder
-也支持自定义 JSON 模板，适配器同时支持常见字段别名和可配置的简单 JSON 路径。
+`timestamp` 和可选的 `sign`。适配器也支持自定义 JSON 模板、常见字段别名和简单
+JSON 路径映射。
 
-如果需要启用签名，请在 SmsForwarder 中配置 secret，并使用相同的 secret 重启
-SmsMCPHub：
+如果要启用 SmsForwarder 签名校验，请在两边配置相同 secret 后再启动 Server：
 
 ```powershell
 $env:SMSFORWARDER_SECRET = "替换为相同的密钥"
 uv run smsmcphub
 ```
 
-SmsMCPHub 会校验 SmsForwarder 的 HMAC-SHA256 时间戳签名。除本地测试外，建议使
-用 HTTPS 或私有网络/VPN。
+### C. 手动验证
 
-#### 3. 验证服务和消息链路
-
-在电脑上检查服务：
+健康检查：
 
 ```powershell
 Invoke-RestMethod http://127.0.0.1:8000/healthz
 ```
 
-预期返回：
+预期：
 
 ```json
 {"status":"ok"}
 ```
 
-在手机浏览器中使用电脑局域网 IP 打开相同地址：
-
-```text
-http://<电脑局域网IP>:8000/healthz
-```
-
-发送真实短信前，可以先模拟 SmsForwarder：
+模拟 SmsForwarder：
 
 ```powershell
 $body = @{
@@ -462,7 +490,7 @@ Invoke-RestMethod `
   -Body $body
 ```
 
-预期返回：
+预期：
 
 ```json
 {
@@ -472,73 +500,28 @@ Invoke-RestMethod `
 }
 ```
 
-发送真实短信后，可以通过 HTTP API 查询：
+### D. 手动配置 MCP 客户端
 
-```powershell
-Invoke-RestMethod `
-  "http://127.0.0.1:8000/api/v1/messages?keyword=SmsMCPHub" |
-  ConvertTo-Json -Depth 8
-```
+MCP 地址是 `/mcp` 的 Streamable HTTP。Agent 和 Server 在同一台电脑时使用
+`127.0.0.1`；否则使用 Server 所在电脑的私有局域网 IP。
 
-在项目目录运行 MCP 冒烟测试：
-
-```powershell
-@'
-import asyncio
-from fastmcp import Client
-
-async def main():
-    async with Client("http://127.0.0.1:8000/mcp") as client:
-        tools = await client.list_tools()
-        print([tool.name for tool in tools])
-        result = await client.call_tool(
-            "sms_search",
-            {"keyword": "SmsMCPHub", "limit": 10},
-        )
-        print(result.content[0].text)
-        print(result.data)
-
-asyncio.run(main())
-'@ | uv run python -
-```
-
-工具列表应包含：
-
-```text
-sms_search
-sms_get
-sms_latest
-sms_conversations
-```
-
-#### 4. 验证 MCP 或使用手动兜底
-
-Skill 通常会自动注册 MCP。服务使用 `/mcp` 提供 Streamable HTTP。Agent 和服务在
-同一台电脑时使用
-`127.0.0.1`；如果 Agent 在局域网另一台机器上运行，则使用电脑的局域网 IP。
-
-只有 Skill 无法注册客户端时，才使用下面的手动命令。
-
-**Codex CLI / Codex 应用 / IDE 扩展**
+#### Codex CLI / 应用 / IDE 扩展
 
 官方参考：[Codex MCP 文档](https://developers.openai.com/codex/mcp)。
-
-使用 Codex CLI 添加：
 
 ```powershell
 codex mcp add smsmcphub --url http://127.0.0.1:8000/mcp
 codex mcp list
 ```
 
-等价的 `config.toml` 配置：
+等价的 `config.toml`：
 
 ```toml
 [mcp_servers.smsmcphub]
 url = "http://127.0.0.1:8000/mcp"
 ```
 
-如果服务端配置了 `SMSMCPHUB_MCP_TOKEN`，使用环境变量传递 Bearer Token，不要
-把 token 直接写进配置文件：
+启用 MCP Token 时：
 
 ```toml
 [mcp_servers.smsmcphub]
@@ -546,10 +529,9 @@ url = "http://127.0.0.1:8000/mcp"
 bearer_token_env_var = "SMSMCPHUB_MCP_TOKEN"
 ```
 
-Codex 默认从 `~/.codex/config.toml` 读取配置；受信任的项目也可以使用项目级
-`.codex/config.toml`。添加后重启 Codex，或使用 `/mcp` 查看已连接的工具。
+重启 Codex 或使用 `/mcp` 查看连接和工具。
 
-**Claude Code（`cc`）**
+#### Claude Code（`cc`）
 
 官方参考：[Claude Code MCP 文档](https://code.claude.com/docs/en/mcp)。
 
@@ -558,14 +540,14 @@ claude mcp add --transport http smsmcphub http://127.0.0.1:8000/mcp
 claude mcp list
 ```
 
-在 Claude Code 会话中使用 `/mcp` 检查连接和工具列表。项目级配置可以这样添加：
+项目级 Server：
 
 ```powershell
 claude mcp add --transport http --scope project `
   smsmcphub http://127.0.0.1:8000/mcp
 ```
 
-项目级配置会保存到 `.mcp.json`：
+生成的 `.mcp.json` 配置：
 
 ```json
 {
@@ -578,109 +560,19 @@ claude mcp add --transport http --scope project `
 }
 ```
 
-启用 MCP 鉴权后，使用 Claude Code 的 `--header` 选项传递 Authorization，不要
-把 token 提交到 `.mcp.json`。
+在 Claude Code 中使用 `/mcp` 检查连接。
 
-### 核心架构
+### E. Windows 手动安装脚本
 
-```text
-SmsForwarder / 手机或云端 Provider
-                    |
-                    | HTTP Webhook
-                    v
-              FastAPI 接入层
-                    |
-                    v
-              Provider 适配器
-                    |
-                    v
-                统一消息模型
-                    |
-                    v
-                  SQLite
-                    |
-          +---------+----------+
-          |                    |
-          v                    v
-       HTTP API             FastMCP Server
-                               |
-                               v
-                 SmsMCPHub Agent Skill（可选）
-                               |
-                               v
-                             Agent
-```
-
-接收链路和 Agent 链路共享领域服务，但不共享 Provider 的原始协议细节：
-
-- **FastAPI 接入层**接收原始请求、完成 Provider 校验，并在消息持久化成功后返回
-  确认响应。
-- **Provider 适配器**负责解析 Provider 特有的表单或 JSON。SmsForwarder 适配器支
-  持默认表单、自定义 JSON、字段别名、简单 JSON 路径和 HMAC-SHA256 签名。
-- **统一消息模型**为所有来源提供相同字段：发送人、接收人、正文、接收时间、来
-  源、会话、状态、元数据和幂等键。
-- **Message Service**负责号码规范化、会话 ID、幂等处理和统一查询操作。
-- **SQLite Repository**保存消息，并为时间、发送人、接收人和会话查询建立索引。
-  重复 Provider 事件按幂等成功处理。
-- **FastMCP Server**只暴露稳定的领域契约，不了解 SmsForwarder 的原始字段名。
-- **SmsMCPHub Agent Skill**提供意图路由和安装配置引导。它是可选层，任何兼容 MCP
-  的客户端仍然可以直接使用 Server。
-
-### MCP 工具
-
-| 工具 | 用途 | 主要输入 |
-|---|---|---|
-| `sms_search` | 按条件分页搜索短信 | sender、recipient、keyword、时间范围、status、limit、cursor |
-| `sms_get` | 获取一条完整短信 | message ID |
-| `sms_latest` | 获取时间窗口内最新匹配短信 | sender、keyword、时间窗口 |
-| `sms_conversations` | 列出会话摘要 | limit、cursor |
-
-`sms_search` 和 `sms_latest` 返回精简消息摘要，减少 Agent 上下文占用；需要完整
-字段时使用 `sms_get`。MVP v1 只提供只读能力，暂不支持发送、回复、删除和长期
-监听。
-
-### HTTP API
-
-```text
-GET  /healthz
-POST /api/v1/providers/{provider_id}/webhook
-GET  /api/v1/messages/{message_id}
-GET  /api/v1/messages
-POST /mcp   (Streamable HTTP MCP endpoint)
-```
-
-默认 Provider ID 是 `smsforwarder`，所以标准 Webhook 地址是：
-
-```text
-http://<电脑局域网IP>:8000/api/v1/providers/smsforwarder/webhook
-```
-
-### 实现和测试
-
-项目采用模块化单体，技术栈为：
-
-- Python 3.11+
-- FastAPI 和 Uvicorn 提供 HTTP 服务
-- FastMCP Streamable HTTP 提供 Agent 接入
-- Pydantic 提供领域模型和工具 Schema 校验
-- Python 标准库 `sqlite3` 驱动 SQLite
-- `uv` 管理可复现环境和锁定依赖
-
-运行检查：
+仓库提供了一个 PowerShell 辅助脚本，可用于手动执行完整配置：
 
 ```powershell
-uv run pytest -q
-uv run ruff check src tests
-uv run python -m compileall -q src tests
+.\skills\smsmcphub\scripts\install.ps1 `
+  -ProjectPath . -Exposure lan -ConfigureCodex -InstallSkill -Start
 ```
 
-测试覆盖 SmsForwarder 表单和 JSON、字段映射、签名校验、重放拒绝、幂等入库、分
-页、会话聚合、FastAPI 接口、MCP 工具发现、结构化结果和 MCP Token 鉴权。
-
-### 安全说明
-
-默认开发配置不启用 Provider secret 和 MCP Token，便于同一网络下快速测试。对外
-暴露服务前，请配置 `SMSFORWARDER_SECRET` 和 `SMSMCPHUB_MCP_TOKEN`，使用 HTTPS
-或 VPN，限制防火墙范围，并保持原始 payload 保存关闭，除非确实需要排查问题。
+手机不需要局域网访问时使用 `-Exposure loopback`。电脑有多个网卡时，增加
+`-NetworkInterface <WLAN网卡名称>`，确保手机 URL 使用 Wi-Fi 地址。脚本不会配置
+公网暴露，也不会覆盖已有 `.env`。
 
 <p align="right"><a href="#english">English</a> | <a href="#中文">返回顶部</a></p>
