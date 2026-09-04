@@ -1,0 +1,15 @@
+interface:
+  display_name: "SmsMCPHub SMS Assistant"
+  short_description: "查短信验证码并自动选择查询工具"
+  default_prompt: "Use $smsmcphub to handle an SMS lookup or SmsMCPHub setup request."
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "smsmcphub"
+      description: "SmsMCPHub read-only SMS query server"
+      transport: "streamable_http"
+      url: "http://127.0.0.1:8000/mcp"
+
+policy:
+  allow_implicit_invocation: true

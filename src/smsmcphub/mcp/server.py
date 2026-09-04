@@ -14,9 +14,35 @@ from smsmcphub.domain.service import MessageService
 
 
 def create_mcp_server(service: MessageService) -> FastMCP:
-    mcp = FastMCP("SmsMCPHub")
+    mcp = FastMCP(
+        "SmsMCPHub",
+        instructions=(
+            "SmsMCPHub provides read-only access to SMS messages received from configured "
+            "providers. Automatically use sms_latest for requests about the newest/current "
+            "message, verification codes, one-time passwords, login codes, or recent alerts. "
+            "Use sms_search for history, filters, keywords, or when the latest result is not "
+            "enough; use sms_get for a referenced message ID or complete metadata; use "
+            "sms_conversations for conversation summaries. Do not ask the user to name an MCP "
+            "tool when the request clearly needs SMS data. This server cannot log into external "
+            "apps, publish content, send SMS, or perform other side effects."
+        ),
+    )
 
-    @mcp.tool
+    read_only = {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    }
+
+    @mcp.tool(
+        description=(
+            "Search SMS history by sender, recipient, keyword, status, or time range. "
+            "Use this for lists, history, filtered searches, or a broader fallback when "
+            "sms_latest finds nothing."
+        ),
+        annotations=read_only,
+    )
     def sms_search(
         sender: str | None = None,
         recipient: str | None = None,
@@ -47,7 +73,13 @@ def create_mcp_server(service: MessageService) -> FastMCP:
         summary = f"Found {count} SMS message{'s' if count != 1 else ''}."
         return ToolResult(content=summary, structured_content=data)
 
-    @mcp.tool
+    @mcp.tool(
+        description=(
+            "Get the complete canonical SMS for a known SmsMCPHub message ID, including "
+            "metadata when available."
+        ),
+        annotations=read_only,
+    )
     def sms_get(message_id: str) -> ToolResult:
         """Get one SMS message by its SmsMCPHub ID."""
         message = service.get(message_id)
@@ -61,7 +93,13 @@ def create_mcp_server(service: MessageService) -> FastMCP:
             structured_content={"found": True, "message": message.model_dump(mode="json")},
         )
 
-    @mcp.tool
+    @mcp.tool(
+        description=(
+            "Return the newest SMS in a recent time window. Use this first for current "
+            "messages, verification codes, OTPs, login codes, or recent alerts."
+        ),
+        annotations=read_only,
+    )
     def sms_latest(
         sender: str | None = None,
         keyword: str | None = None,
@@ -76,7 +114,13 @@ def create_mcp_server(service: MessageService) -> FastMCP:
         summary = "Found the latest matching SMS." if result.found else "No matching SMS found."
         return ToolResult(content=summary, structured_content=data)
 
-    @mcp.tool
+    @mcp.tool(
+        description=(
+            "List SMS conversation summaries ordered by the latest message. Use this for "
+            "conversation, contact, or thread overviews."
+        ),
+        annotations=read_only,
+    )
     def sms_conversations(limit: int = 20, cursor: str | None = None) -> ToolResult:
         """List SMS conversations ordered by their latest message."""
         result = service.conversations(ConversationQuery(limit=limit, cursor=cursor))

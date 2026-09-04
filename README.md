@@ -6,6 +6,8 @@
 
 ## English
 
+> SmsMCPHub enables MCP-compatible agent frameworks—such as Codex and Claude Code—to send and receive mobile SMS messages via MCP, thereby fully automating workflows that rely on SMS. It utilizes SQLite for data persistence and employs FastMCP to provide a unified query interface.
+
 SmsMCPHub is a decoupled SMS ingestion gateway for agents. It accepts messages
 from phone-side or cloud forwarding providers such as
 [SmsForwarder](https://github.com/pppscn/SmsForwarder), normalizes them into a
@@ -224,6 +226,33 @@ The project configuration is stored in `.mcp.json`:
 With MCP authentication enabled, add an Authorization header through Claude
 Code's `--header` option instead of committing the token to `.mcp.json`.
 
+#### Optional agent skill
+
+The repository includes an implicit `smsmcphub` skill. It teaches an agent what
+SmsMCPHub can do, how to choose its four read-only tools, and how to install and
+configure the server when the MCP connection is missing. Install it into the
+current Codex user's skill directory:
+
+```powershell
+Copy-Item -Recurse -Force .\skills\smsmcphub `
+  "$env:USERPROFILE\.codex\skills\smsmcphub"
+```
+
+For a Windows setup that installs dependencies, creates a local `.env` when
+needed, detects a LAN address, starts the server, registers Codex MCP, and
+installs the skill, run:
+
+```powershell
+.\skills\smsmcphub\scripts\install.ps1 `
+  -ProjectPath . -Exposure lan -ConfigureCodex -InstallSkill -Start
+```
+
+The script never configures public exposure and never overwrites an existing
+`.env`. On macOS or Linux, run `uv sync --extra dev`, copy the skill directory to
+`~/.codex/skills/smsmcphub`, and start the service with `uv run smsmcphub`.
+If the computer has multiple adapters, add `-NetworkInterface <WLAN_INTERFACE>`
+so the generated phone URL uses the Wi-Fi address.
+
 ### Core architecture
 
 ```text
@@ -337,6 +366,8 @@ needed for debugging.
 <a id="中文"></a>
 
 ## 中文
+
+> SmsMCPHub 让Codex、Claude Code 等任意支持MCP的Agent框架通过MCP收发移动设备的短信消息等，以全自动各种需要短信的工作流。通过SQLite持久化，并使用FastMCP提供统一查询接口。
 
 SmsMCPHub 是一个面向 Agent 的解耦短信接入网关。它兼容
 [SmsForwarder](https://github.com/pppscn/SmsForwarder) 等手机端或云端转发
@@ -551,6 +582,30 @@ claude mcp add --transport http --scope project `
 
 启用 MCP 鉴权后，使用 Claude Code 的 `--header` 选项传递 Authorization，不要
 把 token 提交到 `.mcp.json`。
+
+#### 可选 Agent Skill
+
+仓库内置一个可隐式触发的 `smsmcphub` Skill。它描述 SmsMCPHub 的能力、四个只
+读工具的选择原则，并在 MCP 不可用时引导安装和配置服务。复制到当前 Codex 用户
+的 Skill 目录：
+
+```powershell
+Copy-Item -Recurse -Force .\skills\smsmcphub `
+  "$env:USERPROFILE\.codex\skills\smsmcphub"
+```
+
+Windows 下可以用下面的命令一次完成依赖安装、创建本地 `.env`、探测局域网 IP、
+启动服务、注册 Codex MCP 和安装 Skill：
+
+```powershell
+.\skills\smsmcphub\scripts\install.ps1 `
+  -ProjectPath . -Exposure lan -ConfigureCodex -InstallSkill -Start
+```
+
+脚本不会配置公网暴露，也不会覆盖已有 `.env`。macOS 或 Linux 下执行
+`uv sync --extra dev`，将 Skill 目录复制到 `~/.codex/skills/smsmcphub`，再使用
+`uv run smsmcphub` 启动服务。如果电脑有多个网卡，可以增加
+`-NetworkInterface <WLAN网卡名称>`，确保生成的手机 URL 使用 Wi-Fi 地址。
 
 ### 核心架构
 

@@ -23,6 +23,7 @@ async def test_fastmcp_tools_are_discoverable_and_callable(service):
         ],
     )
     mcp = create_mcp_server(service)
+    assert "verification codes" in mcp.instructions
     tools = await mcp.get_tools()
     assert set(tools) == {
         "sms_search",
@@ -30,6 +31,7 @@ async def test_fastmcp_tools_are_discoverable_and_callable(service):
         "sms_latest",
         "sms_conversations",
     }
+    assert all(tool.annotations.readOnlyHint for tool in tools.values())
 
     async with Client(mcp) as client:
         result = await client.call_tool("sms_search", {"keyword": "654321"})

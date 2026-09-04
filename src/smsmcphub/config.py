@@ -5,6 +5,8 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 
 @dataclass(frozen=True)
 class ProviderConfig:
@@ -25,6 +27,8 @@ class AppSettings:
     """Application settings with environment-based defaults."""
 
     database_path: str = "./data/smsmcphub.db"
+    server_host: str = "0.0.0.0"
+    server_port: int = 8000
     save_raw_payload: bool = False
     retention_days: int = 30
     mcp_path: str = "/mcp"
@@ -33,6 +37,7 @@ class AppSettings:
 
     @classmethod
     def from_env(cls) -> AppSettings:
+        load_dotenv(override=False)
         mapping_text = os.getenv("SMSFORWARDER_MAPPING", "")
         mapping: dict[str, str] = {}
         if mapping_text:
@@ -62,6 +67,8 @@ class AppSettings:
         )
         return cls(
             database_path=database_path,
+            server_host=os.getenv("SMSMCPHUB_HOST", "0.0.0.0"),
+            server_port=_read_int(os.getenv("SMSMCPHUB_PORT"), default=8000),
             save_raw_payload=save_raw,
             retention_days=max(0, _read_int(os.getenv("SMSMCPHUB_RETENTION_DAYS"), default=30)),
             mcp_path=os.getenv("SMSMCPHUB_MCP_PATH", "/mcp"),
